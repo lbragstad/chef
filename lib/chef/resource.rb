@@ -25,6 +25,7 @@ require 'chef/dsl/reboot_pending'
 require 'chef/mixin/convert_to_class_name'
 require 'chef/resource/conditional'
 require 'chef/resource/conditional_action_not_nothing'
+require 'chef/resource/conditional/anonymous_resource_block'
 require 'chef/resource_collection'
 require 'chef/resource_platform_map'
 require 'chef/node'
@@ -119,8 +120,8 @@ F
 
     end
 
-    FORBIDDEN_IVARS = [:@run_context, :@node, :@not_if, :@only_if, :@enclosing_provider]
-    HIDDEN_IVARS = [:@allowed_actions, :@resource_name, :@source_line, :@run_context, :@name, :@node, :@not_if, :@only_if, :@elapsed_time, :@enclosing_provider]
+    FORBIDDEN_IVARS = [:@run_context, :@node, :@not_if, :@only_if, :@enclosing_provider, @evaluating_guard]
+    HIDDEN_IVARS = [:@allowed_actions, :@resource_name, :@source_line, :@run_context, :@name, :@node, :@not_if, :@only_if, :@elapsed_time, :@enclosing_provider, @evaluating_guard]
 
     include Chef::DSL::DataQuery
     include Chef::Mixin::ParamsValidate
@@ -248,8 +249,10 @@ F
       @retry_delay = 2
       @not_if = []
       @only_if = []
+      @evaluating_guard = false
       @source_line = nil
       @elapsed_time = 0
+      @anonymous_block_inherited_attributes = []
 
       @node = run_context ? deprecated_ivar(run_context.node, :node, :warn) : nil
     end
@@ -292,9 +295,16 @@ F
     def method_missing(method_symbol, *args, &block)
       if enclosing_provider && enclosing_provider.respond_to?(method_symbol)
         enclosing_provider.send(method_symbol, *args, &block)
+      elsif @evaluating_guard && Conditional::AnonymousResourceBlock.well_formed?(*args, &block)
+        evaluate_anonymous_child_resource(method_symbol, caller[0], *args, &block)
       else
         raise NoMethodError, "undefined method `#{method_symbol.to_s}' for #{self.class.to_s}"
       end
+    end
+
+    def evaluate_anonymous_child_resource(resource_symbol, *args, &block)
+      anonymous_resource_block = Conditional::AnonymousResourceBlock.from_resource_symbol(self, resource_symbol, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
+      anonymous_resource_block.evaluate_action
     end
 
     def load_prior_resource
@@ -667,6 +677,16 @@ F
       new_exception.set_backtrace(e.backtrace)
       new_exception
     end
+
+    def with_guard_execution_context
+      @evaluating_guard = true
+      begin
+        yield
+      ensure
+        @evaluating_guard = false
+      end
+    end
+
     # Evaluates not_if and only_if conditionals. Returns a falsey value if any
     # of the conditionals indicate that this resource should be skipped, i.e.,
     # if an only_if evaluates to false or a not_if evaluates to true.
@@ -682,7 +702,13 @@ F
 
       conditionals = [ conditional_action ] + only_if + not_if
       conditionals.find do |conditional|
-        if conditional.continue?
+        should_skip_resource = false
+
+        with_guard_execution_context do
+          should_skip_resource = ! conditional.continue?
+        end
+
+        if ! should_skip_resource
           false
         else
           events.resource_skipped(self, action, conditional)
@@ -800,6 +826,14 @@ F
       end
       resource = resource_for_platform(short_name, platform, version)
       resource
+    end
+
+    protected
+
+    attr_reader :anonymous_block_inherited_attributes
+
+    def append_anonymous_block_inherited_attributes(inherited_attributes)
+      @anonymous_block_inherited_attributes.concat(inherited_attributes)
     end
 
     private
