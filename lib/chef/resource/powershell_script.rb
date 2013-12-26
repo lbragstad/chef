@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 require 'chef/resource/windows_script'
 
 class Chef
@@ -24,6 +23,7 @@ class Chef
 
       def initialize(name, run_context=nil)
         super(name, run_context, :powershell_script, "powershell.exe")
+        append_anonymous_block_inherited_attributes([:architecture])
       end
 
     end
