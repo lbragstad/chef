@@ -58,6 +58,28 @@ class Chef
         )
       end
 
+      def only_if(command=nil, opts={}, &block)
+        translated_command, translated_block = translate_command_block(command, &block)
+        super(translated_command, opts, &translated_block)
+      end
+
+      def not_if(command=nil, opts={}, &block)
+        translated_command, translated_block = translate_command_block(command, &block)
+        super(translated_command, opts, &translated_block)
+      end
+
+      protected
+
+      def translate_command_block(command, &block)
+        if command && ! block_given?
+          command_as_resource_block = Conditional::AnonymousResourceBlock.from_attributes(self, @resource_name, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], {:code => command})
+
+          translated_block = command_as_resource_block.to_evaluation_block
+          [nil, translated_block]
+        else
+          [command, block]
+        end
+      end
     end
   end
 end

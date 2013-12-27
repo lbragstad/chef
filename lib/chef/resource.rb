@@ -295,7 +295,7 @@ F
     def method_missing(method_symbol, *args, &block)
       if enclosing_provider && enclosing_provider.respond_to?(method_symbol)
         enclosing_provider.send(method_symbol, *args, &block)
-      elsif @evaluating_guard && Conditional::AnonymousResourceBlock.well_formed?(*args, &block)
+      elsif @evaluating_guard && Conditional::AnonymousResourceBlock.well_formed_block?(*args, &block)
         evaluate_anonymous_child_resource(method_symbol, caller[0], *args, &block)
       else
         raise NoMethodError, "undefined method `#{method_symbol.to_s}' for #{self.class.to_s}"
@@ -303,7 +303,7 @@ F
     end
 
     def evaluate_anonymous_child_resource(resource_symbol, *args, &block)
-      anonymous_resource_block = Conditional::AnonymousResourceBlock.from_resource_symbol(self, resource_symbol, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
+      anonymous_resource_block = Conditional::AnonymousResourceBlock.from_block(self, resource_symbol, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
       anonymous_resource_block.evaluate_action
     end
 

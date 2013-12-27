@@ -22,12 +22,19 @@ class Chef
   class Resource::Conditional
     class AnonymousResourceBlock
 
-      def self.well_formed?(*args, &block)
+      def self.well_formed_block?(*args, &block)
         args.size == 0 && block_given?
       end
 
-      def self.from_resource_symbol(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, source_line, *args, &block)
-        resource_class = get_resource_class(parent_resource, resource_symbol, *args, &block)
+      def self.from_attributes(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, attributes)
+        resource_block = block_from_attributes(attributes)
+        from_block(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, nil, *nil, &resource_block)
+      end
+
+      def self.from_block(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, source_line, *args, &block)
+        raise ArgumentError, "A block must be specified with no arguments" if !well_formed_block?(*args, &block)
+
+        resource_class = get_resource_class(parent_resource, resource_symbol)
 
         raise ArgumentError, "Specified resource #{resource_symbol.to_s} unknown for this platform" if resource_class.nil?
 
@@ -51,22 +58,34 @@ class Chef
         resource_updated
       end
 
-      private
-
-      def self.get_resource_class(parent_resource, resource_symbol, *args, &block)
-        if well_formed?(*args, &block)
-          if parent_resource.nil? || parent_resource.node.nil? 
-            raise ArgumentError, "Node for anonymous resource must not be nil"
-          end
-          Chef::Resource.resource_for_node(resource_symbol, parent_resource.node)
+      def to_evaluation_block
+        Proc.new do
+          evaluate_action
         end
       end
 
-      def initialize(resource, parent_resource, inherited_attributes, handled_exceptions, source_line, &block)
+      private
+
+      def self.get_resource_class(parent_resource, resource_symbol)
+        if parent_resource.nil? || parent_resource.node.nil?
+          raise ArgumentError, "Node for anonymous resource must not be nil"
+        end
+        Chef::Resource.resource_for_node(resource_symbol, parent_resource.node)
+      end
+
+      def initialize(resource, parent_resource, inherited_attributes, handled_exceptions, source_line=nil, attributes=nil, &block)
         @resource = resource
         @block = block
         @handled_exceptions = handled_exceptions ? handled_exceptions : []
         merge_inherited_attributes(parent_resource, inherited_attributes, source_line)
+      end
+
+      def self.block_from_attributes(attributes)
+        Proc.new do
+          attributes.keys.each do |attribute_name|
+            send(attribute_name, attributes[attribute_name])
+          end
+        end
       end
 
       def merge_inherited_attributes(parent_resource, inherited_attributes, source_line)
@@ -82,7 +101,7 @@ class Chef
           end
         end
 
-        @resource.source_line = source_line
+        @resource.source_line = source_line if source_line
       end
     end
   end
