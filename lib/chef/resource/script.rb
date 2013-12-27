@@ -62,12 +62,12 @@ class Chef
       end
 
       def only_if(command=nil, opts={}, &block)
-        translated_command, translated_block = translate_command_block(command, &block)
+        translated_command, translated_block = translate_command_block(command, opts, &block)
         super(translated_command, opts, &translated_block)
       end
 
       def not_if(command=nil, opts={}, &block)
-        translated_command, translated_block = translate_command_block(command, &block)
+        translated_command, translated_block = translate_command_block(command, opts, &block)
         super(translated_command, opts, &translated_block)
       end
 
@@ -77,10 +77,11 @@ class Chef
         @guard_interpreter = guard_interpreter_symbol
       end
 
-      def translate_command_block(command, &block)
+      def translate_command_block(command, opts, &block)
         if @guard_interpreter && command && ! block_given?
           evaluator = Conditional::AnonymousResourceEvaluator.new(guard_interpreter, self, [Mixlib::ShellOut::ShellCommandFailed])
-          translated_block = evaluator.to_block({:code => command})
+          block_attributes = {:code => command}.merge(opts)
+          translated_block = evaluator.to_block(block_attributes)
           [nil, translated_block]
         else
           [command, block]
