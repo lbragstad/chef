@@ -20,19 +20,19 @@ require 'chef/resource'
 
 class Chef
   class Resource::Conditional
-    class AnonymousResourceBlock
+    class AnonymousResourceEvaluator
 
-      def self.well_formed_block?(*args, &block)
+      def self.well_formed_resource_block?(*args, &block)
         args.size == 0 && block_given?
       end
 
-      def self.from_attributes(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, attributes)
+      def self.from_attributes(parent_resource, resource_symbol, handled_exceptions, attributes)
         resource_block = block_from_attributes(attributes)
-        from_block(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, nil, *nil, &resource_block)
+        from_block(parent_resource, resource_symbol, handled_exceptions, nil, *nil, &resource_block)
       end
 
-      def self.from_block(parent_resource, resource_symbol, inherited_attributes, handled_exceptions, source_line, *args, &block)
-        raise ArgumentError, "A block must be specified with no arguments" if !well_formed_block?(*args, &block)
+      def self.from_block(parent_resource, resource_symbol, handled_exceptions, source_line, *args, &block)
+        raise ArgumentError, "A block must be specified with no arguments" if !well_formed_resource_block?(*args, &block)
 
         resource_class = get_resource_class(parent_resource, resource_symbol)
 
@@ -42,14 +42,16 @@ class Chef
         anonymous_run_context = Chef::RunContext.new(parent_resource.node, {}, empty_events)
         anonymous_resource = resource_class.new('anonymous', anonymous_run_context)
 
-        new(anonymous_resource, parent_resource, inherited_attributes, handled_exceptions, source_line, &block)
+        new(anonymous_resource, parent_resource, handled_exceptions, source_line, &block)
       end
 
-      def evaluate_action
+      def evaluate_action(action = nil)
         @resource.instance_eval(&@block)
 
+        run_action = action || @resource.action
+
         begin
-          @resource.run_action(@resource.action)
+          @resource.run_action(run_action)
           resource_updated = @resource.updated
         rescue *@handled_exceptions
           resource_updated = nil
@@ -58,7 +60,7 @@ class Chef
         resource_updated
       end
 
-      def to_evaluation_block
+      def to_block
         Proc.new do
           evaluate_action
         end
@@ -73,11 +75,11 @@ class Chef
         Chef::Resource.resource_for_node(resource_symbol, parent_resource.node)
       end
 
-      def initialize(resource, parent_resource, inherited_attributes, handled_exceptions, source_line=nil, attributes=nil, &block)
+      def initialize(resource, parent_resource, handled_exceptions, source_line=nil, attributes=nil, &block)
         @resource = resource
         @block = block
         @handled_exceptions = handled_exceptions ? handled_exceptions : []
-        merge_inherited_attributes(parent_resource, inherited_attributes, source_line)
+        merge_inherited_attributes(parent_resource, source_line)
       end
 
       def self.block_from_attributes(attributes)
@@ -88,7 +90,9 @@ class Chef
         end
       end
 
-      def merge_inherited_attributes(parent_resource, inherited_attributes, source_line)
+      def merge_inherited_attributes(parent_resource, source_line)
+        inherited_attributes = parent_resource.block_inherited_attributes
+        
         if inherited_attributes
           inherited_attributes.each do |attribute|
             if parent_resource.respond_to?(attribute) && @resource.respond_to?(attribute)

@@ -41,7 +41,7 @@ class Chef
         @user = nil
         @allowed_actions.push(:run)
         @umask = nil
-        append_anonymous_block_inherited_attributes(
+        append_block_inherited_attributes(
           [
            :cwd,
            :environment,

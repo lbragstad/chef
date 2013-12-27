@@ -32,7 +32,10 @@ class Chef
         @code = nil
         @interpreter = nil
         @flags = nil
+        @guard_interpreter = nil
       end
+
+      attr_reader :guard_interpreter
 
       def code(arg=nil)
         set_or_return(
@@ -70,11 +73,14 @@ class Chef
 
       protected
 
-      def translate_command_block(command, &block)
-        if command && ! block_given?
-          command_as_resource_block = Conditional::AnonymousResourceBlock.from_attributes(self, @resource_name, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], {:code => command})
+      def override_guard_interpreter(guard_interpreter_symbol)
+        @guard_interpreter = guard_interpreter_symbol
+      end
 
-          translated_block = command_as_resource_block.to_evaluation_block
+      def translate_command_block(command, &block)
+        if @guard_interpreter && command && ! block_given?
+          resource_command_evaluator = Conditional::AnonymousResourceEvaluator.from_attributes(self, guard_interpreter, [Mixlib::ShellOut::ShellCommandFailed], {:code => command})
+          translated_block = resource_command_evaluator.to_block
           [nil, translated_block]
         else
           [command, block]

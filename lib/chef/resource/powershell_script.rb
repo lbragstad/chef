@@ -23,7 +23,8 @@ class Chef
 
       def initialize(name, run_context=nil)
         super(name, run_context, :powershell_script, "powershell.exe")
-        append_anonymous_block_inherited_attributes([:architecture])
+        append_block_inherited_attributes([:architecture])
+        override_guard_interpreter(:powershell_script)
       end
 
     end

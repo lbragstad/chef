@@ -25,7 +25,7 @@ require 'chef/dsl/reboot_pending'
 require 'chef/mixin/convert_to_class_name'
 require 'chef/resource/conditional'
 require 'chef/resource/conditional_action_not_nothing'
-require 'chef/resource/conditional/anonymous_resource_block'
+require 'chef/resource/conditional/anonymous_resource_evaluator'
 require 'chef/resource_collection'
 require 'chef/resource_platform_map'
 require 'chef/node'
@@ -229,6 +229,8 @@ F
 
     attr_reader :elapsed_time
 
+    attr_reader :block_inherited_attributes
+
     # Each notify entry is a resource/action pair, modeled as an
     # Struct with a #resource and #action member
 
@@ -252,7 +254,7 @@ F
       @evaluating_guard = false
       @source_line = nil
       @elapsed_time = 0
-      @anonymous_block_inherited_attributes = []
+      @block_inherited_attributes = []
 
       @node = run_context ? deprecated_ivar(run_context.node, :node, :warn) : nil
     end
@@ -295,7 +297,7 @@ F
     def method_missing(method_symbol, *args, &block)
       if enclosing_provider && enclosing_provider.respond_to?(method_symbol)
         enclosing_provider.send(method_symbol, *args, &block)
-      elsif @evaluating_guard && Conditional::AnonymousResourceBlock.well_formed_block?(*args, &block)
+      elsif @evaluating_guard && Conditional::AnonymousResourceEvaluator.well_formed_resource_block?(*args, &block)
         evaluate_anonymous_child_resource(method_symbol, caller[0], *args, &block)
       else
         raise NoMethodError, "undefined method `#{method_symbol.to_s}' for #{self.class.to_s}"
@@ -303,8 +305,8 @@ F
     end
 
     def evaluate_anonymous_child_resource(resource_symbol, *args, &block)
-      anonymous_resource_block = Conditional::AnonymousResourceBlock.from_block(self, resource_symbol, anonymous_block_inherited_attributes, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
-      anonymous_resource_block.evaluate_action
+      anonymous_resource_evaluator = Conditional::AnonymousResourceEvaluator.from_block(self, resource_symbol, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
+      anonymous_resource_evaluator.evaluate_action
     end
 
     def load_prior_resource
@@ -830,10 +832,8 @@ F
 
     protected
 
-    attr_reader :anonymous_block_inherited_attributes
-
-    def append_anonymous_block_inherited_attributes(inherited_attributes)
-      @anonymous_block_inherited_attributes.concat(inherited_attributes)
+    def append_block_inherited_attributes(inherited_attributes)
+      @block_inherited_attributes.concat(inherited_attributes)
     end
 
     private
