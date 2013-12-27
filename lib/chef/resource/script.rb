@@ -79,8 +79,8 @@ class Chef
 
       def translate_command_block(command, &block)
         if @guard_interpreter && command && ! block_given?
-          resource_command_evaluator = Conditional::AnonymousResourceEvaluator.from_attributes(self, guard_interpreter, [Mixlib::ShellOut::ShellCommandFailed], {:code => command})
-          translated_block = resource_command_evaluator.to_block
+          evaluator = Conditional::AnonymousResourceEvaluator.new(guard_interpreter, self, [Mixlib::ShellOut::ShellCommandFailed])
+          translated_block = evaluator.to_block({:code => command})
           [nil, translated_block]
         else
           [command, block]

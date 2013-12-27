@@ -298,15 +298,11 @@ F
       if enclosing_provider && enclosing_provider.respond_to?(method_symbol)
         enclosing_provider.send(method_symbol, *args, &block)
       elsif @evaluating_guard && Conditional::AnonymousResourceEvaluator.well_formed_resource_block?(*args, &block)
-        evaluate_anonymous_child_resource(method_symbol, caller[0], *args, &block)
+        evaluator = Conditional::AnonymousResourceEvaluator.new(method_symbol, self, [Mixlib::ShellOut::ShellCommandFailed], caller[0])
+        evaluator.evaluate_action(&block)
       else
         raise NoMethodError, "undefined method `#{method_symbol.to_s}' for #{self.class.to_s}"
       end
-    end
-
-    def evaluate_anonymous_child_resource(resource_symbol, *args, &block)
-      anonymous_resource_evaluator = Conditional::AnonymousResourceEvaluator.from_block(self, resource_symbol, [Mixlib::ShellOut::ShellCommandFailed], *args, &block)
-      anonymous_resource_evaluator.evaluate_action
     end
 
     def load_prior_resource

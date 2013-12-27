@@ -26,27 +26,22 @@ class Chef
         args.size == 0 && block_given?
       end
 
-      def self.from_attributes(parent_resource, resource_symbol, handled_exceptions, attributes)
-        resource_block = block_from_attributes(attributes)
-        from_block(parent_resource, resource_symbol, handled_exceptions, nil, *nil, &resource_block)
-      end
-
-      def self.from_block(parent_resource, resource_symbol, handled_exceptions, source_line, *args, &block)
-        raise ArgumentError, "A block must be specified with no arguments" if !well_formed_resource_block?(*args, &block)
-
+      def initialize(resource_symbol, parent_resource, handled_exceptions, source_line=nil)
         resource_class = get_resource_class(parent_resource, resource_symbol)
 
         raise ArgumentError, "Specified resource #{resource_symbol.to_s} unknown for this platform" if resource_class.nil?
 
         empty_events = Chef::EventDispatch::Dispatcher.new
         anonymous_run_context = Chef::RunContext.new(parent_resource.node, {}, empty_events)
-        anonymous_resource = resource_class.new('anonymous', anonymous_run_context)
 
-        new(anonymous_resource, parent_resource, handled_exceptions, source_line, &block)
+        @resource = resource_class.new('anonymous', anonymous_run_context)
+        @handled_exceptions = handled_exceptions ? handled_exceptions : []
+        merge_inherited_attributes(parent_resource)
+        @source_line = source_line if source_line
       end
 
-      def evaluate_action(action = nil)
-        @resource.instance_eval(&@block)
+      def evaluate_action(action=nil, &block)
+        @resource.instance_eval(&block)
 
         run_action = action || @resource.action
 
@@ -60,29 +55,23 @@ class Chef
         resource_updated
       end
 
-      def to_block
+      def to_block(attributes, action=nil)
+        resource_block = block_from_attributes(attributes)
         Proc.new do
-          evaluate_action
+          evaluate_action(action, &resource_block)
         end
       end
 
       private
 
-      def self.get_resource_class(parent_resource, resource_symbol)
+      def get_resource_class(parent_resource, resource_symbol)
         if parent_resource.nil? || parent_resource.node.nil?
           raise ArgumentError, "Node for anonymous resource must not be nil"
         end
         Chef::Resource.resource_for_node(resource_symbol, parent_resource.node)
       end
 
-      def initialize(resource, parent_resource, handled_exceptions, source_line=nil, attributes=nil, &block)
-        @resource = resource
-        @block = block
-        @handled_exceptions = handled_exceptions ? handled_exceptions : []
-        merge_inherited_attributes(parent_resource, source_line)
-      end
-
-      def self.block_from_attributes(attributes)
+      def block_from_attributes(attributes)
         Proc.new do
           attributes.keys.each do |attribute_name|
             send(attribute_name, attributes[attribute_name])
@@ -90,7 +79,7 @@ class Chef
         end
       end
 
-      def merge_inherited_attributes(parent_resource, source_line)
+      def merge_inherited_attributes(parent_resource)
         inherited_attributes = parent_resource.block_inherited_attributes
         
         if inherited_attributes
@@ -104,8 +93,6 @@ class Chef
             end
           end
         end
-
-        @resource.source_line = source_line if source_line
       end
     end
   end
