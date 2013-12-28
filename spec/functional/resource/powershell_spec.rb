@@ -184,6 +184,26 @@ describe Chef::Resource::WindowsScript::PowershellScript, :windows_only do
       resource.only_if.clear
     end
 
+    it "evaluates a powershell $false for a not_if block as false" do
+      resource.not_if  "$false"
+      resource.should_skip?(:run).should be_false
+    end
+
+    it "evaluates a powershell $true for a not_if block as true" do
+      resource.not_if  "$true"
+      resource.should_skip?(:run).should be_true
+    end
+
+    it "evaluates a powershell $false for an only_if block as false" do
+      resource.only_if  "$false"
+      resource.should_skip?(:run).should be_true
+    end
+
+    it "evaluates a powershell $true for a not_if block as true" do
+      resource.only_if  "$true"
+      resource.should_skip?(:run).should be_false
+    end
+
     it "evaluates a not_if block using powershell.exe" do
       resource.not_if  "exit([int32](![System.Environment]::CommandLine.Contains('powershell.exe')))"
       resource.should_skip?(:run).should be_true
